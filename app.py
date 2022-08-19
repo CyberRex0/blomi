@@ -8,6 +8,7 @@ from misskey import Misskey, MiAuth, Permissions
 from misskey.exceptions import MisskeyMiAuthFailedException
 import time
 import sqlite3
+import os
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36'
 
@@ -38,6 +39,12 @@ def sha256(data: bytes):
         data = data.encode()
     return hashlib.sha256(data).hexdigest()
 
+def convertURI(u, hostname):
+    uri = u['uri']
+    if not u['uri']:
+        return f'https://{hostname}/users/{u["id"]}'
+    return uri
+
 @app.route('/')
 def root():
     return render_template('index.html')
@@ -47,10 +54,12 @@ def mypage():
     if not session.get('logged_in'):
         return redirect('/')
     
+    myURI = convertURI(session['i'], session['hostname'])
+
     cur = db.cursor()
-    cur.execute('SELECT COUNT(*) FROM hashedBlockInfo WHERE blockBy = ?', (sha256(session['user_id']),))
+    cur.execute('SELECT COUNT(*) FROM hashedBlockInfo WHERE blockBy = ?', (sha256(myURI),))
     blockingCount = cur.fetchone()['COUNT(*)']
-    cur.execute('SELECT COUNT(*) FROM hashedBlockInfo WHERE blockTo = ?', (sha256(session['user_id']),))
+    cur.execute('SELECT COUNT(*) FROM hashedBlockInfo WHERE blockTo = ?', (sha256(myURI),))
     blockedCount = cur.fetchone()['COUNT(*)']
     cur.execute('SELECT COUNT(*) FROM hashedBlockInfo')
     totalCount = cur.fetchone()['COUNT(*)']
@@ -159,11 +168,13 @@ def login_msk_callback():
     session['username'] = i['username']
     session['acct'] = f'{i["username"]}@{session["hostname"]}'
     session['user_id'] = i['id']
-
+    session['i'] = i
+ 
     collectBlocking({
         'hostname': session['hostname'],
         'token': token,
-        'user_id': session['user_id']
+        'user_id': session['user_id'],
+        'user_uri': convertURI(i, session['hostname'])
     })
 
     session['logged_in'] = True
@@ -185,14 +196,13 @@ def collectBlocking(data):
         last_id = blocks[-1]['id']
         time.sleep(0.2)
     
-    print(blocking_users)
-    
     hashedBlockInfo = []
-    hashedBlockerId = sha256(data['user_id'])
+    hashedBlockerId = sha256(data['user_uri'])
+
     for block in blocking_users:
         hashedBlockInfo.append((
             hashedBlockerId,
-            sha256(block['blockee']['id']),
+            sha256(convertURI(block['blockee'], data['hostname']))
         ))
     
     cur = db.cursor()
@@ -204,4 +214,4 @@ def collectBlocking(data):
 
 
 
-app.run(host='127.0.0.1', port=3300, debug=True, threaded=True)
+app.run(host='127.0.0.1', port=3300, debug=(True if os.environ.get('FLASK_ENV')!='production' else False), threaded=True)
