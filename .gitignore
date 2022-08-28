@@ -1,3 +1,4 @@
 env/
 blomi.db
 config.py
+flask_session/
