@@ -1,3 +1,4 @@
 flask
 Misskey.py
 requests
+Flask-session
