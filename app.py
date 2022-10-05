@@ -1,5 +1,6 @@
 from flask import Flask, session, render_template, request, redirect, make_response
 from flask_session import Session
+from werkzeug.middleware.proxy_fix import ProxyFix
 import json
 import requests
 from datetime import timedelta
@@ -17,6 +18,7 @@ http_session = requests.Session()
 http_session.headers.update({'User-Agent': USER_AGENT})
 
 app = Flask(__name__, static_url_path='')
+app.wsgi_app = ProxyFix(app.wsgi_app)
 app.secret_key = bytes(bytearray(random.getrandbits(8) for _ in range(32)))
 app.permanent_session_lifetime = timedelta(hours=1)
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -215,7 +217,9 @@ def collectBlocking(data):
     db.commit()
     
 
-
+@app.route('/test')
+def test():
+    return request.host_url
 
 
 app.run(host='127.0.0.1', port=3300, debug=(True if os.environ.get('FLASK_ENV')!='production' else False), threaded=True)
